@@ -1,3 +1,15 @@
+"""
+Auto-booking routine for Deskbird.
+
+Designed to run as a weekly cron job (e.g. every Monday). Books the primary
+desk (from .env) and any additional desks (from EXTRA_BOOKINGS) for all
+weekdays in the configured range (default 60 days ahead).
+
+Already-booked dates are silently skipped by the API (returned as "failed"
+with an "already occupied" message), so running this repeatedly is safe.
+
+Entry point: `poetry run deskbooker-auto` (registered in pyproject.toml).
+"""
 import os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -5,11 +17,16 @@ from dotenv import load_dotenv
 from deskbooker.deskbooker import get_deskbird_client, perform_book
 from deskbooker.logger import setup_logger
 
-# Load environment variables
 load_dotenv()
 logger = setup_logger("auto_book")
 
+
 def _log_booking_results(label, data_response):
+    """Log booking results in a human-readable format.
+
+    Merges successful and failed bookings into a single sorted list
+    and logs each with a status icon (✅ or ❌) and the date.
+    """
     successful = data_response.get("successfulBookings", [])
     failed = data_response.get("failedBookings", [])
 
@@ -32,15 +49,19 @@ def _log_booking_results(label, data_response):
         logger.info(f"{status_icon} | {date_str} | {msg}")
 
 
-# Additional bookings: list of (label, workspace_id, resource_id, desk_name)
-# desk_name is matched against the full desk name in Deskbird
+# Additional desks to book in other workspaces.
+# Each entry: (label, workspace_id, resource_id, desk_name)
+#   - label: Human-readable name for logging.
+#   - workspace_id / resource_id: Identify the workspace and floor/building.
+#   - desk_name: Full desk name as it appears in Deskbird (e.g. "04 . 15 . 1").
+#     Resolved dynamically via find_zone_item_id() — no hardcoded zone_item_id needed.
 EXTRA_BOOKINGS = [
     ("Office-2 04.15.1", "16697", "181223", "04 . 15 . 1"),
 ]
 
 
 def auto_book_max_range():
-    # Calculate dates
+    """Book all configured desks for the next BOOKING_RANGE_DAYS days."""
     today = datetime.now()
     days_range = int(os.environ.get("BOOKING_RANGE_DAYS", 60))
     max_date = today + timedelta(days=days_range)
@@ -58,7 +79,8 @@ def auto_book_max_range():
         data_response = perform_book(client, today, max_date)
         _log_booking_results("Office-1", data_response)
 
-        # Book extra spots (different workspaces)
+        # Book extra spots — reuses the same client by swapping workspace/resource
+        # and resolving the desk name dynamically via the API
         for label, ws_id, res_id, desk_name in EXTRA_BOOKINGS:
             logger.info(f"--- Booking {label} ---")
             client.workspace_id = ws_id
