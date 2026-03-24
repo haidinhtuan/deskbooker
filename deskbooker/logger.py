@@ -1,5 +1,4 @@
 import logging
-import os
 import sys
 
 def setup_logger(name=__name__):
