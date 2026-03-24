@@ -1,3 +1,15 @@
+"""
+Daily runner for automated check-in and cancellation.
+
+Designed to run as a cron job on weekdays. Determines whether the user is
+at the office by checking the current WiFi SSID against a configured list.
+
+Behavior:
+  - At office (WiFi matches):  Check in to all of today's bookings.
+  - Not at office:             Cancel today's bookings to free up the spots.
+  - Force mode (--force):      Skip WiFi detection, always check in.
+                                Recommended for cron usage.
+"""
 import argparse
 import os
 import subprocess
@@ -18,7 +30,12 @@ except KeyError:
 
 
 def get_wifi_info():
-    # Try Linux (nmcli)
+    """Detect the currently connected WiFi SSID.
+
+    Tries Linux (nmcli) first, then falls back to macOS (airport utility).
+    Returns a dict with an "SSID" key (None if no WiFi detected).
+    """
+    # Try Linux (nmcli) - parses terse output for the active connection
     try:
         process = subprocess.Popen(
             ["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"],
@@ -33,7 +50,7 @@ def get_wifi_info():
     except FileNotFoundError:
         pass
 
-    # Fallback to macOS
+    # Fallback to macOS (airport utility)
     try:
         process = subprocess.Popen(
             [
@@ -58,6 +75,8 @@ def get_wifi_info():
         return {"SSID": None}
 
 
+# Initialize the Deskbird client from environment variables.
+# This client is used for both check-in and cancellation.
 db_client = DeskbirdClient(
     refresh_token=os.environ["REFRESH_TOKEN"],
     token_key=os.environ["TOKEN_KEY"],

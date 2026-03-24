@@ -1,6 +1,18 @@
 #!/usr/bin/env python
 """
-Deskbooker CLI
+Deskbooker CLI — manual interface for desk booking operations.
+
+Provides subcommands for booking, checking in, viewing, and canceling
+desk reservations via the Deskbird API.
+
+Usage:
+    deskbooker book --from 2024-01-01 --to 2024-01-31
+    deskbooker book --from 2024-01-01 --to 2024-01-31 --zone "Growth" --desk "18"
+    deskbooker checkin
+    deskbooker bookings
+    deskbooker cancel
+    deskbooker cancel --from 2024-01-01 --to 2024-01-02
+
 Author: Hai Dinh Tuan <me@haidinhtuan.de>
 """
 import argparse
@@ -18,6 +30,7 @@ load_dotenv()
 
 
 def get_deskbird_client():
+    """Create a DeskbirdClient from environment variables."""
     return DeskbirdClient(
         refresh_token=os.environ["REFRESH_TOKEN"],
         token_key=os.environ["TOKEN_KEY"],
@@ -30,28 +43,39 @@ def get_deskbird_client():
 
 
 def perform_checkin(client):
+    """Check in to all of today's bookings."""
     return client.checkin()
 
 
 def perform_cancel(client, from_date, to_date):
+    """Cancel bookings in the given date range."""
     client.cancel_booking(from_date, to_date)
 
 
 def perform_get_bookings(client, limit=60):
+    """Fetch upcoming bookings as a parsed JSON dict."""
     response = client.get_bookings(limit=limit)
     return json.loads(response.text)
 
 
 def perform_book(client, from_date, to_date, zone=None, desk_number=None):
+    """Book a desk for the given date range.
+
+    If zone and desk_number are provided, resolves the zone_item_id
+    dynamically. Otherwise uses the client's existing zone_item_id.
+    Both zone and desk_number must be provided together, or neither.
+    """
     if (zone is None) != (desk_number is None):
         raise ValueError("either of the following arguments are required: -z/--zone, -d/--desk")
-    
+
     if zone is not None and desk_number is not None:
         client.set_zone_item_id(zone_name=zone, desk_id=desk_number)
-        
+
     response = client.book_desk(from_date=from_date, to_date=to_date)
     return json.loads(response.text)
 
+
+# --- CLI subcommand handlers ---
 
 def checkin_cmd(args):
     client = get_deskbird_client()
@@ -59,6 +83,7 @@ def checkin_cmd(args):
 
 
 def cancel_cmd(args):
+    """Cancel bookings. Defaults to today if no dates specified."""
     client = get_deskbird_client()
     if args.from_date is None and args.to_date is None:
         from_date = to_date = datetime.today()
@@ -80,6 +105,7 @@ def cancel_cmd(args):
 
 
 def bookings_cmd(args):
+    """Display upcoming bookings as a formatted table."""
     client = get_deskbird_client()
     limit = int(os.environ.get("BOOKING_RANGE_DAYS", 60))
     bookings = perform_get_bookings(client, limit=limit)
@@ -97,6 +123,7 @@ def bookings_cmd(args):
 
 
 def book_cmd(args):
+    """Book a desk and print results with status icons."""
     client = get_deskbird_client()
     try:
         from_date = dateutil.parser.parse(args.from_date)
@@ -117,18 +144,17 @@ def book_cmd(args):
     except KeyError as e:
         print(str(e))
         sys.exit(1)
-    
-    # New response structure handling
+
+    # Parse and display booking results
     successful = data_response.get("successfulBookings", [])
     failed = data_response.get("failedBookings", [])
-    
+
     all_bookings = []
     for b in successful:
-        # Successful bookings are just the booking objects
         all_bookings.append(b)
-        
+
     for f in failed:
-        # Failed bookings have a 'booking' key and an 'error' key
+        # Failed entries wrap the booking object and include an error
         b = f["booking"]
         b["errorMessage"] = f["error"].get("message", "Unknown error")
         all_bookings.append(b)
@@ -141,10 +167,12 @@ def book_cmd(args):
         print(f"{status_icon} | {date_str} | {msg}")
 
 
+# --- Argument parser setup ---
+
 arg_parser = argparse.ArgumentParser()
 subparsers = arg_parser.add_subparsers(help="sub-command help")
 
-book_parser = subparsers.add_parser("book", help="book help")
+book_parser = subparsers.add_parser("book", help="Book a desk for a date range")
 book_parser.set_defaults(func=book_cmd)
 book_parser.add_argument(
     "-f", "--from", dest="from_date", help="From date", required=True
@@ -153,13 +181,13 @@ book_parser.add_argument("-t", "--to", dest="to_date", help="To date", required=
 book_parser.add_argument("-d", "--desk", dest="desk_number", help="Desk number")
 book_parser.add_argument("-z", "--zone", dest="zone", help="Set zone")
 
-checkin_parser = subparsers.add_parser("checkin", help="checkin help")
+checkin_parser = subparsers.add_parser("checkin", help="Check in to today's bookings")
 checkin_parser.set_defaults(func=checkin_cmd)
 
-bookings_parser = subparsers.add_parser("bookings", help="bookings help")
+bookings_parser = subparsers.add_parser("bookings", help="View upcoming bookings")
 bookings_parser.set_defaults(func=bookings_cmd)
 
-cancel_parser = subparsers.add_parser("cancel", help="cancel help")
+cancel_parser = subparsers.add_parser("cancel", help="Cancel bookings")
 cancel_parser.add_argument(
     "-f", "--from", dest="from_date", help="From date", required=False
 )
