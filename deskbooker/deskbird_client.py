@@ -62,6 +62,24 @@ class DeskbirdClient:
                 raise KeyError(f"desk_id: {desk_id} not found in {zone_name}")
         raise KeyError(f"zone_name: {zone_name} does not exists")
 
+    def find_zone_item_id(self, desk_name: str) -> None:
+        """Search all zones for a desk by its full name."""
+        url = (
+            f"{self.API_BASE_URL}/internalWorkspaces/"
+            f"{self.workspace_id}/zones?internal"
+        )
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+        }
+        response = json.loads(requests.get(url=url, headers=headers).text)
+        for zone in response["results"]:
+            for desk in zone["availability"]["zoneItems"]:
+                if desk_name == desk["name"]:
+                    self.zone_item_id = desk["id"]
+                    logger.info(f"Found desk '{desk_name}' in zone '{zone['name']}' (zone_item_id: {desk['id']})")
+                    return
+        raise KeyError(f"desk '{desk_name}' not found in any zone")
+
     def book_desk(self, from_date: datetime, to_date: datetime) -> requests.Response:
         url = f"{self.API_BASE_URL}/bookings"
         if not self.zone_item_id:
@@ -120,31 +138,33 @@ class DeskbirdClient:
             logger.error("Could not find bookings list in response")
             return None
 
+        checked_in_any = False
         for booking in bookings_list:
             is_today = (
                 datetime.fromtimestamp(int(booking["bookingStartTime"] / 1000)).date()
                 == datetime.today().date()
             )
             if is_today:
+                zone_name = booking.get('zoneItemName', 'unknown')
                 if booking["checkInStatus"] == "checkedIn":
                     logger.info(
-                        f"Already checked in to {booking['zoneItemName']}!"
+                        f"Already checked in to {zone_name}!"
                     )
-                    return None
+                    checked_in_any = True
                 else:
-                    # Use the URL and method found in browser trace
                     url = f"{self.API_BASE_URL}/bookings/{booking['id']}/check-in"
-                    # Body found in browser trace
-                    body = {"qrCodeZoneItemId": self.zone_item_id}
+                    zone_item_id = booking.get("zoneItemId", self.zone_item_id)
+                    body = {"qrCodeZoneItemId": zone_item_id}
                     response = requests.patch(
                         url, headers=headers, data=json.dumps(body)
                     )
                     if response.status_code == 200:
-                        logger.info("Checked in successfully! ✅")
+                        logger.info(f"Checked in to {zone_name} successfully! ✅")
                     else:
-                        logger.error(f"Failed to check in: {response.status_code} {response.text}")
-                    return response
-        logger.info("You don't have any valid bookings for today.")
+                        logger.error(f"Failed to check in to {zone_name}: {response.status_code} {response.text}")
+                    checked_in_any = True
+        if not checked_in_any:
+            logger.info("You don't have any valid bookings for today.")
         return None
 
     def cancel_booking(self, from_date: datetime, to_date: datetime) -> None:
