@@ -120,6 +120,14 @@ class DeskbirdClient:
 
         return requests.get(url, headers=headers)
 
+    def _parse_bookings_list(self, data: dict) -> Optional[list]:
+        if "results" in data:
+            return data["results"]
+        elif "data" in data and "bookings" in data["data"]:
+            return data["data"]["bookings"]
+        logger.error("Could not find bookings list in response")
+        return None
+
     def checkin(self) -> Optional[requests.Response]:
         headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -127,15 +135,8 @@ class DeskbirdClient:
         }
 
         response = self.get_bookings(limit=10)
-        data = json.loads(response.text)
-        
-        # Handle different potential response structures
-        if "results" in data:
-            bookings_list = data["results"]
-        elif "data" in data and "bookings" in data["data"]:
-            bookings_list = data["data"]["bookings"]
-        else:
-            logger.error("Could not find bookings list in response")
+        bookings_list = self._parse_bookings_list(json.loads(response.text))
+        if bookings_list is None:
             return None
 
         checked_in_any = False
@@ -168,48 +169,29 @@ class DeskbirdClient:
         return None
 
     def cancel_booking(self, from_date: datetime, to_date: datetime) -> None:
-        body = {
-            "workspaceId": self.workspace_id,
-        }
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
         }
-        
+
         response = self.get_bookings(limit=100)
-        data = json.loads(response.text)
-        
-        # Handle different potential response structures
-        if "results" in data:
-            bookings_list = data["results"]
-        elif "data" in data and "bookings" in data["data"]:
-            bookings_list = data["data"]["bookings"]
-        else:
-            logger.error("Could not find bookings list in response")
+        bookings_list = self._parse_bookings_list(json.loads(response.text))
+        if bookings_list is None:
             return
 
         current_date = from_date
         while current_date <= to_date:
-            has_booking = False
-            for booking in bookings_list:
-                is_correct_date = (
-                    datetime.fromtimestamp(
+            if current_date.weekday() < 5:
+                for booking in bookings_list:
+                    booking_date = datetime.fromtimestamp(
                         int(booking["bookingStartTime"] / 1000)
                     ).date()
-                    == current_date.date()
-                )
-                if is_correct_date:
-                    url = f"{self.API_BASE_URL}/bookings/{booking['id']}/cancel"
-                    res = requests.patch(url=url, headers=headers)
-                    
-                    if res.status_code == 200 or res.status_code == 204:
-                        logger.info(f"✅ {current_date.date()} canceled")
-                    else:
-                        logger.error(f"❌ Failed to cancel {current_date.date()}: {res.status_code}")
-                    
-                    has_booking = True
-                    break
-            if not has_booking:
-                # logger.info(f"You don't have a booking on {current_date.date()}")
-                pass
+                    if booking_date == current_date.date():
+                        url = f"{self.API_BASE_URL}/bookings/{booking['id']}/cancel"
+                        res = requests.patch(url=url, headers=headers)
+                        if res.status_code in (200, 204):
+                            logger.info(f"✅ {current_date.date()} canceled")
+                        else:
+                            logger.error(f"❌ Failed to cancel {current_date.date()}: {res.status_code}")
+                        break
             current_date += timedelta(days=1)
