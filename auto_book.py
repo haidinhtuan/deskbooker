@@ -36,7 +36,7 @@ def _log_booking_results(label, data_response):
 # Additional bookings: list of (label, workspace_id, resource_id, desk_name)
 # desk_name is matched against the full desk name in Deskbird
 EXTRA_BOOKINGS = [
-    ("Berlin-DSTRCT 04.15.1", "16697", "181223", "04 . 15 . 1"),
+    ("Office-2 04.15.1", "16697", "181223", "04 . 15 . 1"),
 ]
 
 
@@ -55,9 +55,9 @@ def auto_book_max_range():
     try:
         client = get_deskbird_client()
 
-        # Book default spot (Revaler Spitze)
+        # Book default spot (primary workspace from .env)
         data_response = perform_book(client, today, max_date)
-        _log_booking_results("Revaler Spitze", data_response)
+        _log_booking_results("Office-1", data_response)
 
         # Book extra spots (different workspaces)
         for label, ws_id, res_id, desk_name in EXTRA_BOOKINGS:
