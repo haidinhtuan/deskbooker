@@ -60,4 +60,8 @@ cover/
 .cursor/
 .copilot/
 .windsurf/
+.claude/
 prompts/
+
+# Temp files
+temp-images/
