@@ -7,7 +7,7 @@ A Python tool to automate desk bookings on Deskbird, manage check-ins based on n
 ## Features
 
 *   **Bulk Booking:** Book a specific desk or zone for a date range.
-*   **Multi-Workspace Booking:** Automatically book desks across multiple workspaces (e.g., Revaler Spitze and DSTRCT) with dynamic desk lookup.
+*   **Multi-Workspace Booking:** Automatically book desks across multiple workspaces with dynamic desk lookup.
 *   **Auto-Check-in:** Automatically check in to all of today's bookings across all workspaces. Supports both WiFi-based detection and force mode.
 *   **Auto-Cancellation:** Automatically cancel today's booking if not at the office (based on WiFi SSID).
 *   **Auto-Booking Routine:** Automatically book your configured desks for the next 60 days (or configured range) to ensure you always have a seat.
