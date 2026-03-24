@@ -23,7 +23,6 @@ class DeskbirdClient:
     start_hour: int
     end_hour: int
     API_BASE_URL = "https://api.deskbird.com/v1.1"
-    APP_BASE_URL = "https://web.deskbird.app/api/v1.1"
 
     def __init__(
         self,
